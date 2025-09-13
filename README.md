@@ -171,6 +171,10 @@ python tests/backtest_runner.py --rsi --random-search
 - **MACD**: Hareketli Ortalama Yakınsama Iraksama (Moving Average Convergence Divergence)
 - **EMA**: Üstel Hareketli Ortalama (Exponential Moving Average)
 
+## 🗺️ Roadmap
+
+Gelecek özellikler ve planlanan güncellemeler için [ROADMAP.md](ROADMAP.md) dosyasına bakın.
+
 ## Optimizasyon Yöntemleri
 
 - **TensorFlow GPU**: Parametre üretimi için GPU kullanan hibrit optimizasyon (en hızlı)
