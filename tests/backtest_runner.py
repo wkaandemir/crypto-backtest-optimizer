@@ -11,6 +11,7 @@ Usage:
 import sys
 import os
 from pathlib import Path
+import json
 
 # Check dependencies before importing
 def check_dependencies():
@@ -127,7 +128,7 @@ from data.fetch_binance_data import load_binance_data
 
 class UniversalBacktestRunner:
     """Universal backtest runner that can handle multiple strategies"""
-    
+
     def __init__(self, data_file: str = 'btcusdt_5m.csv', gpu_only: bool = False, cpu_only: bool = False):
         self.data_file = data_file
         self.data = None
@@ -135,19 +136,33 @@ class UniversalBacktestRunner:
         self.sampling_info = None
         self.gpu_only = gpu_only
         self.cpu_only = cpu_only
+        self.config = self._load_config()
         self.strategies = self._discover_strategies()
         # Logging removed - only reports are generated
-        
+
         # Validate GPU settings
         if self.gpu_only and self.cpu_only:
             raise ValueError("Cannot set both --gpu-only and --cpu-only flags")
         
+    def _load_config(self) -> Dict:
+        """Load configuration from config.json"""
+        config_path = Path(__file__).parent.parent / 'config.json'
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        else:
+            print("⚠️  config.json not found, using defaults")
+            return {}
+
     def _discover_strategies(self) -> Dict:
         """Discover all available strategies in the strategies folder"""
         strategies = {}
         strategies_path = Path(__file__).parent.parent / 'strategies'
         
         # Known strategy mappings
+        # Use config.json for default params if available
+        config_strategies = self.config.get('strategies', {}) if self.config else {}
+
         strategy_mappings = {
             'rsi': {
                 'module': 'strategies.rsi.rsi_strategy',
@@ -155,7 +170,8 @@ class UniversalBacktestRunner:
                 'params_class': 'RSIParameters',
                 'optimization_module': 'strategies.rsi.rsi_tensorflow_optimizer',
                 'optimization_func': 'optimize_rsi_strategy',
-                'default_params': {'period': 14, 'oversold': 30.0, 'overbought': 70.0}
+                'default_params': config_strategies.get('rsi', {}).get('default_params',
+                    {'period': 14, 'oversold': 30.0, 'overbought': 70.0})
             },
             'macd': {
                 'module': 'strategies.macd.macd_strategy',
@@ -163,7 +179,8 @@ class UniversalBacktestRunner:
                 'params_class': 'MACDParameters',
                 'optimization_module': 'strategies.macd.macd_optimization',
                 'optimization_func': 'optimize_macd_strategy',
-                'default_params': {'fast_period': 12, 'slow_period': 26, 'signal_period': 9}
+                'default_params': config_strategies.get('macd', {}).get('default_params',
+                    {'fast_period': 12, 'slow_period': 26, 'signal_period': 9})
             },
             'ema': {
                 'module': 'strategies.ema.ema_strategy',
@@ -171,7 +188,8 @@ class UniversalBacktestRunner:
                 'params_class': 'EMAParameters',
                 'optimization_module': None,  # Will use GPU optimizer directly
                 'optimization_func': None,
-                'default_params': {'fast_period': 12, 'slow_period': 26, 'use_signal': False}
+                'default_params': config_strategies.get('ema', {}).get('default_params',
+                    {'fast_period': 12, 'slow_period': 26, 'use_signal': False})
             }
         }
         
@@ -185,34 +203,30 @@ class UniversalBacktestRunner:
         return strategies
         
     def load_data(self) -> pd.DataFrame:
-        """Load data with random 1 year sampling"""
+        """Load full dataset without sampling"""
         print(f"\nLoading {self.data_file}...")
         full_data = load_binance_data(self.data_file)
-        
-        # Data info logging removed - shown in console only
-        
-        min_candles = 105120  # 1 year of 5-minute candles
-        
-        if len(full_data) > min_candles:
-            # Random 1 year sample
-            years = 1
-            sample_size = min_candles
-            start_idx = random.randint(0, len(full_data) - sample_size)
-            
-            self.data = full_data.iloc[start_idx:start_idx + sample_size].copy()
-            
+
+        # Use full dataset
+        self.data = full_data
+
+        # Calculate years in dataset
+        if len(full_data) > 0:
+            time_span = full_data.index[-1] - full_data.index[0]
+            years = time_span.days / 365.25
+
             self.sampling_info = {
                 'years': years,
-                'start_date': self.data.index[0],
-                'end_date': self.data.index[-1],
-                'size': sample_size
+                'start_date': full_data.index[0],
+                'end_date': full_data.index[-1],
+                'size': len(full_data)
             }
-            
-            print(f"📊 Random Sample: 1 year | {self.data.index[0].strftime('%Y-%m-%d')} to {self.data.index[-1].strftime('%Y-%m-%d')}")
+
+            print(f"📊 Full Dataset: {years:.1f} years | {full_data.index[0].strftime('%Y-%m-%d')} to {full_data.index[-1].strftime('%Y-%m-%d')}")
+            print(f"   Total candles: {len(full_data):,}")
         else:
-            self.data = full_data
-            print(f"⚠️  Using full data ({len(full_data):,} candles)")
-            
+            print(f"⚠️  No data loaded from {self.data_file}")
+
         return self.data
     
     def run_strategy_backtest(self, strategy_name: str, mode: str = 'all', generate_svg: bool = True) -> Dict:
@@ -252,29 +266,44 @@ class UniversalBacktestRunner:
             # 2. Grid search optimization
             if mode in ['basic-strategy', 'all']:
                 print(f"\n[2/3] Grid Search for {strategy_name.upper()}...")
+
+                # Get optimization ranges from config.json
+                strategy_config = self.config.get('strategies', {}).get(strategy_name, {})
+                opt_ranges = strategy_config.get('optimization_ranges', {})
+                grid_config = strategy_config.get('grid_search', {})
+
                 if strategy_name == 'rsi':
                     results['grid'] = strategy.optimize_parameters(
                         self.data,
-                        period_range=(5, 30),
-                        oversold_range=(20, 40),
-                        overbought_range=(60, 80),
-                        step_size=5
+                        period_range=(opt_ranges.get('period', {}).get('min', 5),
+                                    opt_ranges.get('period', {}).get('max', 30)),
+                        oversold_range=(opt_ranges.get('oversold', {}).get('min', 20),
+                                      opt_ranges.get('oversold', {}).get('max', 40)),
+                        overbought_range=(opt_ranges.get('overbought', {}).get('min', 60),
+                                        opt_ranges.get('overbought', {}).get('max', 80)),
+                        step_size=grid_config.get('period_step', 5)
                     )
                 elif strategy_name == 'macd':
                     results['grid'] = strategy.optimize_parameters(
                         self.data,
-                        fast_range=(5, 20),
-                        slow_range=(20, 50),
-                        signal_range=(5, 15),
-                        step_size=5
+                        fast_range=(opt_ranges.get('fast_period', {}).get('min', 5),
+                                  opt_ranges.get('fast_period', {}).get('max', 20)),
+                        slow_range=(opt_ranges.get('slow_period', {}).get('min', 20),
+                                  opt_ranges.get('slow_period', {}).get('max', 50)),
+                        signal_range=(opt_ranges.get('signal_period', {}).get('min', 5),
+                                    opt_ranges.get('signal_period', {}).get('max', 15)),
+                        step_size=grid_config.get('fast_step', 5)
                     )
                 elif strategy_name == 'ema':
                     results['grid'] = strategy.optimize_parameters(
                         self.data,
-                        fast_range=(5, 20),
-                        slow_range=(20, 50),
-                        signal_range=(5, 15),
-                        step_size=5,
+                        fast_range=(opt_ranges.get('fast_period', {}).get('min', 5),
+                                  opt_ranges.get('fast_period', {}).get('max', 20)),
+                        slow_range=(opt_ranges.get('slow_period', {}).get('min', 20),
+                                  opt_ranges.get('slow_period', {}).get('max', 50)),
+                        signal_range=(opt_ranges.get('signal_period', {}).get('min', 5),
+                                    opt_ranges.get('signal_period', {}).get('max', 15)),
+                        step_size=grid_config.get('fast_step', 5),
                         use_signal=False  # Simple EMA crossover
                     )
                 print(f"✅ Best Return: {results['grid']['best_return']:.2f}%")
@@ -320,23 +349,29 @@ class UniversalBacktestRunner:
                 print(f"\n🎲 Random Search Optimization for {strategy_name.upper()}...")
                 try:
                     from strategies.rsi.rsi_random_search_optimizer import GPURSIOptimizer
-                    
+
                     # Initialize optimizer with GPU settings
                     gpu_only = getattr(self, 'gpu_only', False)
-                    optimizer = GPURSIOptimizer(data_file='btcusdt_1h.csv', gpu_only=gpu_only)
-                    
-                    # Load 5 years of data
-                    optimizer.load_5year_data()
-                    
+                    optimizer = GPURSIOptimizer(data_file=self.data_file, gpu_only=gpu_only)
+
+                    # Use the already loaded full dataset
+                    optimizer.data = self.data
+
+                    # Get optimization ranges from config.json
+                    rsi_config = self.config.get('strategies', {}).get('rsi', {}).get('optimization_ranges', {})
+
                     # Run optimization with 1000 random parameter combinations
                     print("\n📊 Testing 1000 parameter combinations...")
-                    print("   Each on a random 1-year segment")
-                    
+                    print(f"   Using full dataset ({self.sampling_info['years']:.1f} years)")
+
                     opt_results = optimizer.optimize_parameters(
                         num_combinations=1000,
-                        period_range=(7, 28),
-                        oversold_range=(20, 40),
-                        overbought_range=(60, 80)
+                        period_range=(rsi_config.get('period', {}).get('min', 7),
+                                    rsi_config.get('period', {}).get('max', 28)),
+                        oversold_range=(rsi_config.get('oversold', {}).get('min', 20),
+                                      rsi_config.get('oversold', {}).get('max', 40)),
+                        overbought_range=(rsi_config.get('overbought', {}).get('min', 60),
+                                        rsi_config.get('overbought', {}).get('max', 80))
                     )
                     
                     # SVG report generation removed
@@ -357,114 +392,139 @@ class UniversalBacktestRunner:
             # 5. Full GPU Vectorized optimization (RSI only for now)
             if mode == 'tensorflow-gpu' and strategy_name == 'rsi':
                 print(f"\n🔥 FULL GPU VECTORIZED Optimization for {strategy_name.upper()}...")
+
+                # Always use GPU optimizer - no fallback
                 try:
-                    from strategies.rsi.rsi_optimizer import SimpleGPUOptimizer, SimpleGPUConfig
-                    
-                    # Configure for maximum performance
-                    config = SimpleGPUConfig(
-                        period_min=5,
-                        period_max=50,
-                        oversold_min=15.0,
-                        oversold_max=35.0,
-                        overbought_min=65.0,
-                        overbought_max=85.0
-                    )
-                    
-                    # Initialize simple fast GPU optimizer
-                    optimizer = SimpleGPUOptimizer(config=config)
-                    
-                    # Load full data for random sampling
-                    from data.fetch_binance_data import load_binance_data
-                    full_data = load_binance_data(self.data_file)
-                    print(f"   Loaded full dataset: {len(full_data)} candles ({full_data.index[0].strftime('%Y-%m-%d')} to {full_data.index[-1].strftime('%Y-%m-%d')})")
-                    
-                    # Run Simple GPU optimization
-                    print("\n🚀 OPTIMIZED: Simple but FAST GPU parameter optimization!")
-                    print("   Efficient RSI calculation + vectorized backtesting")
-                    print("   Expected speed: 700+ tests/second")
-                    
-                    opt_results = optimizer.optimize_parameters(
-                        data=full_data, 
-                        num_tests=500000
-                    )
-                    
-                    results['tensorflow_gpu'] = {
-                        'optimization_results': opt_results,
-                        'performance_stats': optimizer.performance_stats
-                    }
-                    
-                    # Print summary statistics
-                    if opt_results:
-                        print(f"\n📊 OPTIMIZATION SUMMARY:")
-                        print("=" * 60)
-                        print(f"Total tests completed: {len(opt_results)}")
-                        print(f"Speed achieved: {optimizer.performance_stats['tests_per_second']:.0f} tests/second")
-                        print(f"Total time: {optimizer.performance_stats['total_time']:.2f} seconds")
-                        
-                        # Calculate statistics
-                        returns = [r['total_return'] for r in opt_results]
-                        print(f"\n📈 RETURN STATISTICS:")
-                        print(f"   Best Return: {max(returns):.2f}%")
-                        print(f"   Worst Return: {min(returns):.2f}%")
-                        print(f"   Average Return: {sum(returns)/len(returns):.2f}%")
-                        print(f"   Median Return: {sorted(returns)[len(returns)//2]:.2f}%")
-                        print("=" * 60)
-                    
+                        from strategies.rsi.rsi_gpu_optimizer import GPUOptimizedRSI, GPUConfig
+
+                        # Load ranges from config.json
+                        rsi_config = self.config.get('strategies', {}).get('rsi', {}).get('optimization_ranges', {})
+
+                        # Configure for GPU optimization
+                        config = GPUConfig(
+                            period_min=rsi_config.get('period', {}).get('min', 5),
+                            period_max=rsi_config.get('period', {}).get('max', 50),
+                            oversold_min=rsi_config.get('oversold', {}).get('min', 15.0),
+                            oversold_max=rsi_config.get('oversold', {}).get('max', 35.0),
+                            overbought_min=rsi_config.get('overbought', {}).get('min', 65.0),
+                            overbought_max=rsi_config.get('overbought', {}).get('max', 85.0),
+                            batch_size=500  # Reduced for memory efficiency
+                        )
+
+                        # Calculate total combinations
+                        period_step = rsi_config.get('period', {}).get('step', 1)
+                        oversold_step = rsi_config.get('oversold', {}).get('step', 1.0)
+                        overbought_step = rsi_config.get('overbought', {}).get('step', 1.0)
+
+                        period_count = int((config.period_max - config.period_min) / period_step) + 1
+                        oversold_count = int((config.oversold_max - config.oversold_min) / oversold_step) + 1
+                        overbought_count = int((config.overbought_max - config.overbought_min) / overbought_step) + 1
+                        total_combinations = period_count * oversold_count * overbought_count
+
+                        print(f"\n📊 GPU-Optimized Parameter Testing:")
+                        print(f"   Period: {config.period_min} to {config.period_max} (step: {period_step}) = {period_count} values")
+                        print(f"   Oversold: {config.oversold_min:.1f} to {config.oversold_max:.1f} (step: {oversold_step}) = {oversold_count} values")
+                        print(f"   Overbought: {config.overbought_min:.1f} to {config.overbought_max:.1f} (step: {overbought_step}) = {overbought_count} values")
+                        print(f"   Total combinations: {total_combinations:,}")
+                        print(f"   Using full dataset: {len(self.data)} candles")
+
+                        # Initialize GPU optimizer
+                        optimizer = GPUOptimizedRSI(config=config)
+
+                        # Run GPU-optimized parameter testing
+                        opt_results = optimizer.optimize_parameters(data=self.data)
+
+                        results['tensorflow_gpu'] = {
+                            'optimization_results': opt_results,
+                            'performance_stats': optimizer.performance_stats
+                        }
+
                 except ImportError as e:
-                    print(f"❌ Error: Simple GPU optimizer not available. {e}")
-                    print("   Please install: pip install tensorflow")
+                    print(f"❌ FATAL: GPU optimizer not available. {e}")
+                    print("   GPU is REQUIRED for this mode!")
+                    raise
                 except Exception as e:
-                    print(f"❌ Error running Simple GPU optimization: {e}")
+                    print(f"❌ FATAL: GPU optimization failed: {e}")
+                    import traceback
                     traceback.print_exc()
+                    raise
             
-            # 5b. Fallback to hybrid for other strategies
-            elif mode == 'tensorflow-gpu' and strategy_name in ['ema', 'macd']:
-                print(f"\n🚀 Hybrid TensorFlow GPU Optimization for {strategy_name.upper()}...")
+            # 5b. True GPU parallel for MACD
+            elif mode == 'tensorflow-gpu' and strategy_name == 'macd':
+                print(f"\n🔥 FULL GPU VECTORIZED Optimization for {strategy_name.upper()}...")
                 try:
-                    if strategy_name == 'ema':
-                        from strategies.ema.ema_gpu_optimizer import HybridTensorFlowGPUOptimizer, HybridGPUConfig
-                    elif strategy_name == 'macd':
-                        from strategies.macd.macd_gpu_optimizer import HybridTensorFlowGPUOptimizer, HybridGPUConfig
-                    
-                    # Configure for optimal performance
-                    config = HybridGPUConfig(
-                        batch_size=50,  # Batch size for 1000 tests
-                        mixed_precision=True,
-                        xla_jit=True
+                    from strategies.macd.macd_gpu_optimizer import GPUOptimizedMACD, GPUConfig
+
+                    # Load ranges from config.json
+                    macd_config = self.config.get('strategies', {}).get('macd', {}).get('optimization_ranges', {})
+
+                    # Configure for GPU optimization
+                    config = GPUConfig(
+                        fast_min=macd_config.get('fast_period', {}).get('min', 5),
+                        fast_max=macd_config.get('fast_period', {}).get('max', 20),
+                        fast_step=macd_config.get('fast_period', {}).get('step', 2),
+                        slow_min=macd_config.get('slow_period', {}).get('min', 20),
+                        slow_max=macd_config.get('slow_period', {}).get('max', 50),
+                        slow_step=macd_config.get('slow_period', {}).get('step', 3),
+                        signal_min=macd_config.get('signal_period', {}).get('min', 5),
+                        signal_max=macd_config.get('signal_period', {}).get('max', 15),
+                        signal_step=macd_config.get('signal_period', {}).get('step', 2),
+                        batch_size=500
                     )
-                    
-                    # Initialize hybrid optimizer
-                    optimizer = HybridTensorFlowGPUOptimizer(data_file=self.data_file, config=config)
-                    
-                    # Load full data for random sampling
-                    from data.fetch_binance_data import load_binance_data
-                    full_data = load_binance_data(self.data_file)
-                    print(f"   Loaded full dataset: {len(full_data)} candles ({full_data.index[0].strftime('%Y-%m-%d')} to {full_data.index[-1].strftime('%Y-%m-%d')})")
-                    
-                    # Run hybrid GPU+CPU optimization
-                    print("\n⚡ Running 500,000 parameter tests with hybrid GPU+CPU approach...")
-                    print("   Each test uses a random 1-year segment from the full dataset")
-                    print("   Expected speed: 15-20 tests/second")
-                    
-                    opt_results = optimizer.optimize_parameters(
-                        data=full_data, 
-                        num_tests=500000
-                    )
-                    
+
+                    # Initialize GPU optimizer
+                    optimizer = GPUOptimizedMACD(config=config)
+
+                    # Run GPU-optimized parameter testing
+                    opt_results = optimizer.optimize_parameters(data=self.data)
+
                     results['tensorflow_gpu'] = {
                         'optimization_results': opt_results,
                         'performance_stats': optimizer.performance_stats
                     }
-                    
-                    print(f"\n✅ Hybrid TensorFlow GPU optimization completed!")
-                    print(f"   Speed achieved: {optimizer.performance_stats['tests_per_second']:.0f} tests/second")
-                    
-                except ImportError as e:
-                    print(f"❌ Error: TensorFlow GPU optimizer not available. {e}")
-                    print("   Please install: pip install tensorflow")
+
                 except Exception as e:
-                    print(f"❌ Error running TensorFlow GPU optimization: {e}")
+                    print(f"❌ FATAL: GPU optimization failed: {e}")
+                    import traceback
                     traceback.print_exc()
+                    raise
+
+            # 5c. True GPU parallel for EMA
+            elif mode == 'tensorflow-gpu' and strategy_name == 'ema':
+                print(f"\n🔥 FULL GPU VECTORIZED Optimization for {strategy_name.upper()}...")
+                try:
+                    from strategies.ema.ema_gpu_optimizer import GPUOptimizedEMA, GPUConfig
+
+                    # Load ranges from config.json
+                    ema_config = self.config.get('strategies', {}).get('ema', {}).get('optimization_ranges', {})
+
+                    # Configure for GPU optimization
+                    config = GPUConfig(
+                        fast_min=ema_config.get('fast_period', {}).get('min', 5),
+                        fast_max=ema_config.get('fast_period', {}).get('max', 20),
+                        fast_step=ema_config.get('fast_period', {}).get('step', 2),
+                        slow_min=ema_config.get('slow_period', {}).get('min', 20),
+                        slow_max=ema_config.get('slow_period', {}).get('max', 50),
+                        slow_step=ema_config.get('slow_period', {}).get('step', 3),
+                        batch_size=500
+                    )
+
+                    # Initialize GPU optimizer
+                    optimizer = GPUOptimizedEMA(config=config)
+
+                    # Run GPU-optimized parameter testing
+                    opt_results = optimizer.optimize_parameters(data=self.data)
+
+                    results['tensorflow_gpu'] = {
+                        'optimization_results': opt_results,
+                        'performance_stats': optimizer.performance_stats
+                    }
+
+                except Exception as e:
+                    print(f"❌ FATAL: GPU optimization failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    raise
             
         except Exception as e:
             print(f"❌ Error running {strategy_name} strategy: {e}")
@@ -751,21 +811,19 @@ class UniversalBacktestRunner:
 
 
 def check_gpu():
-    """Check GPU availability for TensorFlow"""
-    # Logging removed - only console output
+    """Check GPU availability for TensorFlow - GPU is REQUIRED"""
     try:
         import tensorflow as tf
         gpus = tf.config.list_physical_devices('GPU')
         if not gpus:
-            # GPU status logging removed
-            print("⚠️  WARNING: No GPU found. TensorFlow optimizations will be slower.")
+            print("❌ FATAL: No GPU found!")
+            print("   GPU is REQUIRED for this optimizer!")
             print("   To enable GPU support:")
             print("   1. Install NVIDIA CUDA Toolkit")
             print("   2. Install cuDNN")
             print("   3. Reinstall TensorFlow with GPU support")
             return False
         else:
-            # GPU status logging removed
             print(f"✅ GPU Available: {gpus[0].name}")
             # Check CUDA version
             try:
@@ -780,14 +838,11 @@ def check_gpu():
                 pass
             return True
     except ImportError:
-        # Error logging removed
-        print("⚠️  TensorFlow not installed!")
+        print("❌ FATAL: TensorFlow not installed!")
         print("   Install with: pip install tensorflow")
-        print("   Or for CPU only: pip install tensorflow-cpu")
         return False
     except Exception as e:
-        # Error logging removed
-        print(f"⚠️  Error checking GPU: {e}")
+        print(f"❌ FATAL: Error checking GPU: {e}")
         return False
 
 
@@ -925,6 +980,14 @@ Examples:
     
     # Check GPU availability
     has_gpu = check_gpu()
+
+    # If tensorflow-gpu mode is selected, GPU is required
+    if mode == 'tensorflow-gpu' and not has_gpu:
+        print("\n❌ FATAL: tensorflow-gpu mode requires a GPU!")
+        print("   Either:")
+        print("   1. Install GPU support (CUDA + cuDNN)")
+        print("   2. Use --basic-strategy mode instead")
+        sys.exit(1)
     
     # Initialize and run backtest runner
     print("\n" + "="*60)
