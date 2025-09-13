@@ -68,10 +68,11 @@ Bu roadmap, Crypto Backtest Optimizer projesinin gelecek versiyonlarında planla
 - [ ] **Sector Rotation**: Sektör bazlı strateji değişimi
 
 ### Gelişmiş Raporlama
-- [ ] **Interactive HTML Dashboard**: Etkileşimli performans göstergeleri
+- [ ] **Static HTML Reports**: Detaylı performans raporları
 - [ ] **Detailed Trade Analysis**: Her işlemin detaylı analizi
 - [ ] **Monte Carlo Simülasyonu**: Risk analizi
 - [ ] **CSV/Excel Export**: Detaylı veri dışa aktarımı
+- [ ] **LaTeX/PDF Reports**: Profesyonel rapor formatı
 
 ---
 
@@ -80,14 +81,13 @@ Bu roadmap, Crypto Backtest Optimizer projesinin gelecek versiyonlarında planla
 
 ### Profesyonel Araçlar
 - [ ] **Batch Testing**: Toplu backtest çalıştırma
-- [ ] **Strategy Marketplace**: Strateji paylaşım platformu
 - [ ] **Performance Benchmarking**: Strateji karşılaştırma
+- [ ] **Strategy Templates**: Hazır strateji şablonları
 
 ### Otomasyon
-- [ ] **Scheduled Backtests**: Zamanlanmış testler
 - [ ] **Auto-Report Generation**: Otomatik rapor üretimi
 - [ ] **Strategy Optimization Queue**: Sıralı optimizasyon
-- [ ] **Cloud Sync**: Bulut yedekleme
+- [ ] **Parallel Processing**: Çoklu CPU/GPU ile paralel test
 
 ### Gelişmiş Analitik
 - [ ] **Market Regime Detection**: Piyasa durumu tespiti
