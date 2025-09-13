@@ -75,29 +75,7 @@ Bu roadmap, Crypto Backtest Optimizer projesinin gelecek versiyonlarında planla
 
 ---
 
-## 🌐 v1.3.0 - Market Integration & Live Data
-*Hedef: Aralık 2025*
-
-### Exchange Entegrasyonları
-- [ ] **Binance Spot Trading**: Spot market desteği
-- [ ] **Multi-Exchange Support**: Bybit, OKX temel desteği
-- [ ] **Order Book Data**: Derinlik analizi
-- [ ] **Funding Rate Analysis**: Futures piyasa sentiment'i
-
-### Gerçek Zamanlı Özellikler
-- [ ] **Paper Trading**: Canlı veri ile simülasyon
-- [ ] **Real-time Alerts**: Telegram/Discord bildirimleri
-- [ ] **Live Performance Tracking**: Anlık performans takibi
-- [ ] **Market Scanner**: Fırsat tarayıcısı
-
-### Veri Kaynakları
-- [ ] **Alternative Data**: Fear & Greed Index
-- [ ] **Economic Calendar**: Makro ekonomik olaylar
-- [ ] **Volume Analysis**: Hacim profili analizi
-
----
-
-## 🎯 v2.0.0 - Professional Tools & Automation
+## 🎯 v1.3.0 - Professional Tools & Automation
 *Hedef: Q1 2026*
 
 ### Profesyonel Araçlar
