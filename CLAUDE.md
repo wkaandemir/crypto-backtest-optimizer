@@ -2,9 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## 🌍 Language Requirements / Dil Gereksinimleri
 
-High-performance cryptocurrency trading strategy backtesting and optimization framework with GPU acceleration. Supports RSI, MACD, and EMA strategies with multiple optimization approaches.
+**IMPORTANT**: All documentation, comments, commit messages, and user-facing text in this repository MUST be in Turkish (Türkçe). This includes:
+- README files and documentation
+- Code comments and docstrings
+- Git commit messages
+- GitHub releases and tags
+- Error messages and user prompts
+- Variable names can remain in English for compatibility
+
+**ÖNEMLİ**: Bu depodaki tüm dokümantasyon, yorumlar, commit mesajları ve kullanıcıya yönelik metinler TÜRKÇE olmalıdır. Bu şunları içerir:
+- README dosyaları ve dokümantasyon
+- Kod yorumları ve docstring'ler
+- Git commit mesajları
+- GitHub release ve etiketler
+- Hata mesajları ve kullanıcı bildirimleri
+- Değişken isimleri uyumluluk için İngilizce kalabilir
+
+## Project Overview / Proje Genel Bakış
+
+Yüksek performanslı kripto para ticaret stratejisi geri test ve optimizasyon framework'ü. GPU hızlandırma desteği ile RSI, MACD ve EMA stratejilerini destekler.
 
 ## Quick Start
 
