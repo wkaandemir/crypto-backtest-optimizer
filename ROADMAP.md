@@ -79,7 +79,6 @@ Bu roadmap, Crypto Backtest Optimizer projesinin gelecek versiyonlarında planla
 *Hedef: Q1 2026*
 
 ### Profesyonel Araçlar
-- [ ] **Strategy Builder GUI**: Basit arayüz ile strateji oluşturma
 - [ ] **Batch Testing**: Toplu backtest çalıştırma
 - [ ] **Strategy Marketplace**: Strateji paylaşım platformu
 - [ ] **Performance Benchmarking**: Strateji karşılaştırma
