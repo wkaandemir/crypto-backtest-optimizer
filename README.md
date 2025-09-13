@@ -13,7 +13,7 @@ GPU hızlandırmalı yüksek performanslı ticaret stratejisi geri test ve optim
 Tüm gereksinimleri (CUDA, cuDNN, Python paketleri) otomatik olarak kurmak için:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/yourusername/crypto-strategy-optimizer/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/wkaandemir/crypto-strategy-optimizer/main/install.sh | bash
 ```
 
 Veya repository'yi klonladıysanız:
