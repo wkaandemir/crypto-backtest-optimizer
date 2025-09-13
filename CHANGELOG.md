@@ -5,7 +5,15 @@ Crypto Backtest Optimizer projesindeki tüm önemli değişiklikler bu dosyada b
 Format [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) standardına dayanmaktadır,
 ve bu proje [Semantic Versioning](https://semver.org/lang/tr/) kurallarına uymaktadır.
 
-## [2.0.0] - 2025-01-13 - GERÇEK GPU PARALELLİĞİ 🚀
+## [Unreleased]
+
+### 🚀 Planlanan Özellikler
+- Daha fazla strateji desteği (Bollinger Bands, Stochastic RSI)
+- Web tabanlı görselleştirme arayüzü
+- Gerçek zamanlı trading botu entegrasyonu
+- Multi-timeframe analiz desteği
+
+## [v1.1.0] - 2025-01-13 - Performans ve Dokümantasyon Güncellemesi 🚀
 
 ### 🔥 Devrim Niteliğinde Değişiklikler
 - **GERÇEK GPU PARALELLİĞİ İMPLEMENTASYONU**
@@ -89,7 +97,7 @@ python tests/backtest_runner.py --all-tensorflow-gpu
 - TensorFlow 2.x gerekli
 - İlk çalıştırmada TensorFlow derlemesi 10-15 saniye sürebilir
 
-## [1.1.0] - 2025-01-13
+## [v1.0.0] - 2025-01-12 - İlk Kararlı Sürüm
 
 ### Eklenenler
 - **Merkezi Konfigürasyon Sistemi** (`config.json`)
